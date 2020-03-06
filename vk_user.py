@@ -1,6 +1,25 @@
 import vk_common
 
 
+def get_attr_value(fields, name_attr):
+    """
+
+    (dict, string) -> dict
+
+    Function gets value of attribute by dict from vk and by name this attribute
+
+    """
+
+    f = fields.get(name_attr)
+    vk_common.dprint(2, vk_common.func_name(), f"Тип переменной = ", type(f))
+
+    if f is not None:
+        if isinstance(f, str):
+            if len(f) <= 0:
+                f = None
+    return f
+
+
 def get_info_dict(user_id, first_name, last_name, age, sex, interests, books, music, cnt_common_interests,
                   cnt_common_books, cnt_common_music, cnt_common_friend, cnt_common_groups):
     """
@@ -35,59 +54,23 @@ class User:
     Class describe user VK
 
     """
+
     # id, first_name, last_name, age, interests, books, music, sex, city
     @property
-    def id(self):
-        return self.info['id']
-
-    @property
-    def first_name(self):
-        return self.info['first_name']
-
-    @property
-    def last_name(self):
-        return self.info['last_name']
-
-    @property
-    def age(self):
-        return self.info.get('age')
-
-    @property
-    def bdate(self):
-        return self.info.get('bdate')
-
-    @property
-    def interests(self):
-        return self.info.get('interests')
-
-    @property
-    def books(self):
-        return self.info.get('books')
-
-    @property
-    def music(self):
-        return self.info.get('music')
-
-    def movies(self):
-        return self.info.get('movies')
-
-    @property
-    def sex(self):
-        return self.info.get('sex')
-
-    @property
-    def city(self):
-        return self.info.get('city')
-
-    @property
     def city_id(self):
-        city_dict = self.info.get('city')
+        city_dict = self.city
         if city_dict is not None:
             return city_dict['id']
 
     @property
+    def city_title(self):
+        city_dict = self.city
+        if city_dict is not None:
+            return city_dict['title']
+
+    @property
     def link(self):
-        user_id = self.id
+        user_id = self.uid
         if user_id is not None:
             value = f"https://vk.com/id{user_id}"
             return value
@@ -102,7 +85,17 @@ class User:
 
         """
 
-        self.info = {}
+        self.uid = None
+        self.last_name = None
+        self.first_name = None
+        self.bdate = None
+        self.age = None
+        self.interests = None
+        self.books = None
+        self.music = None
+        self.sex = None
+        self.city = None
+
         self.groups = None
         self.friends = None
         self.error = {'error': 0, 'msg': ''}
@@ -111,19 +104,34 @@ class User:
 
         self.cnt_common_friends = 0
         self.cnt_common_groups = 0
+        self.age_difference = 0
 
-        self.cnt_common_interests = ''
-        self.cnt_common_books = ''
-        self.cnt_common_music = ''
+        self.cnt_common_interests = 0
+        self.cnt_common_books = 0
+        self.cnt_common_music = 0
 
     # Assign class by nickname with check from vk
     def assign_by_nickname(self, nickname):
+        """
+
+        (string) -> None (set self.error)
+
+        Function set some parameters by nickname of user
+
+        """
+
+        if not isinstance(nickname, str):
+            self.error = {"error": -1, "msg": 'Передан параметр не строка.'}
+        else:
+            if len(nickname) == 0:
+                self.error = {"error": -1, "msg": 'Передан пустой параметр.'}
+
         # Get user_id as integer value
         try:
-            self.info['id'] = int(nickname)
+            self.uid = int(nickname)
         except ValueError:
             # Convert from nickname to user_id
-            error, msg, self.info['id'] = self.get_info(nickname)
+            error, msg, self.uid = self.get_info(nickname)
             if error != 0:
                 self.error = {"error": error, "msg": msg}
                 return
@@ -132,25 +140,38 @@ class User:
 
     # Assign class by user_id which exists in vk
     def assign_by_user_info(self, user_info):
+        """
+
+        (dict) -> None
+
+        Function set some parameters of object User by information about user
+
+        """
+
         # id,first_name,last_name,bdate,deactivated,is_closed,interests,books,movies,music,last_seen,personal,relation,sex,city
-        for key in vk_common.FIELDS_USER_INFO.split(','):
-            value = user_info.get(key)
-            if value is not None:
-                if key == 'bdate':
-                    self.info['age'] = vk_common.get_age(value)
-                    self.info[key] = value
-                else:
-                    self.info[key] = value
-            else:
-                self.info[key] = None
+        vk_common.dprint(2, "user_info = ", user_info)
+        self.set_attrs(user_info)
+
+    def set_attrs(self, fields):
+        # id,first_name,last_name,bdate,deactivated,is_closed,interests,books,music,sex,city
+        self.uid = fields.get('id')
+        self.first_name = get_attr_value(fields, 'first_name')
+        self.last_name = get_attr_value(fields, 'last_name')
+        self.bdate = get_attr_value(fields, 'bdate')
+        self.age = vk_common.get_age(self.bdate)
+        self.interests = get_attr_value(fields, 'interests')
+        self.books = get_attr_value(fields, 'books')
+        self.music = get_attr_value(fields, 'music')
+        self.sex = get_attr_value(fields, 'sex')
+        self.city = get_attr_value(fields, 'city')
 
     # Get user_id by nickname of user VK
     def get_info(self, nickname):
         """
 
-        (None) -> (int, string, int)
+        (string) -> (int, string, None)
 
-        Function gets id of user by nickname
+        Function gets information about user through api vk by nickname of user
 
         """
 
@@ -173,7 +194,6 @@ class User:
             return value
 
         info_json = info_json_list[0]
-
         error, msg, deactivated = vk_common.get_field_of_response(info_json, "deactivated")
         if error == 0 and (deactivated == "DELETED" or deactivated == "BANNED"):
             value = (error, msg, None)
@@ -186,27 +206,18 @@ class User:
             return value
 
         # id,first_name,last_name,bdate,deactivated,is_closed,interests,books,music,sex,city
-        for key, value in fields.items():
-            if value is None:
-                self.info[key] = None
-                continue
-            if key in ('first_name', 'last_name', 'interests', 'books', 'movies', 'music') and len(value) <= 0:
-                self.info[key] = None
-                continue
+        self.uid = fields.get('id')
+        self.first_name = get_attr_value(fields, 'first_name')
+        self.last_name = get_attr_value(fields, 'last_name')
+        self.bdate = get_attr_value(fields, 'bdate')
+        self.age = vk_common.get_age(self.bdate)
+        self.interests = get_attr_value(fields, 'interests')
+        self.books = get_attr_value(fields, 'books')
+        self.music = get_attr_value(fields, 'music')
+        self.sex = get_attr_value(fields, 'sex')
+        self.city = get_attr_value(fields, 'city')
 
-            # if key in ('interests', 'books', 'movies', 'music'):
-            #     if len(value) <= 0:
-            #         self.info[key] = None
-            #     else:
-            #         self.info[key] = value
-            if key == 'bdate':
-                self.info['age'] = vk_common.get_age(value)
-                self.info[key] = value
-            else:
-                self.info[key] = value
-
-        value = (0, "", self.info['id'])
-        return value
+        return 0, "", self.uid
 
     # Get user_id by nickname of user VK
     def get_top_photos(self, top_count):
@@ -219,7 +230,7 @@ class User:
         """
 
         params_here = vk_common.params.copy()
-        params_here["owner_id"] = self.id
+        params_here["owner_id"] = self.uid
         params_here["album_id"] = 'profile'
         params_here["rev"] = 1
         params_here["extended"] = 1
@@ -245,28 +256,37 @@ class User:
 
         url_dict = {}
         for item in items:
-            # print(item)
+            vk_common.dprint(2, item)
             # Select max size
             sizes = item['sizes']
             max_size_elem = None
             max_size_w = 0
             max_size_h = 0
             for picture in sizes:
+                if picture['width'] > vk_common.MAX_IMAGE_WIDTH or picture['height'] > vk_common.MAX_IMAGE_HEIGHT:
+                    continue
                 if picture['width'] >= max_size_w and picture['height'] >= max_size_h:
                     max_size_w = picture['width']
                     max_size_h = picture['height']
                     max_size_elem = picture
             item['sizes'] = max_size_elem
-            url_dict[max_size_elem['url']] = item['likes']['count']
+            url_dict[(item['id'], max_size_elem['url'])] = item['likes']['count']
+
+            vk_common.dprint(2, f"Выбрали фото с максимальным размером: width = {max_size_w} height = {max_size_h} "
+                                f"url = {max_size_elem['url']} owner_id = {item['owner_id']} "
+                                f"id = {item['id']} likes_count = {item['likes']['count']}")
 
         # Sort dict by values
         list_d = list(url_dict.items())
+        vk_common.dprint(2, "До сортировки картинок по лайкам", list_d)
         list_d.sort(reverse=True, key=lambda i: i[1])
+        vk_common.dprint(2, "После сортировки картинок по лайкам", list_d)
 
         top_url = []
         for item in list_d[:top_count:1]:
             top_url.append(item[0])
 
+        vk_common.dprint(2, "В итоге получили список url: ", top_url)
         value = (0, "", top_url)
         return value
 
@@ -285,7 +305,7 @@ class User:
             return value
 
         params_here = vk_common.params.copy()
-        params_here["user_id"] = self.id
+        params_here["user_id"] = self.uid
 
         error, msg, response = vk_common.request_get("https://api.vk.com/method/friends.get", params_here,
                                                      vk_common.func_name())
@@ -298,8 +318,6 @@ class User:
             value = (error, msg, None)
             return value
 
-        # self.count_friends = count_items[0]
-        # self.friends = count_items[1]
         self.count_friends = count
         self.friends = items
 
@@ -317,7 +335,7 @@ class User:
         """
 
         if not isinstance(other, User):
-            print(f"Входные данные типа {type(other)}, а ожидается тип {type(self)}")
+            vk_common.dprint(1, f"Входные данные типа {type(other)}, а ожидается тип {type(self)}")
             raise ValueError
 
         # Conversions to sets from lists
@@ -341,6 +359,7 @@ class User:
         for user_id in common_friends_list:
             user_friend = User()
             user_friend.assign_by_nickname(user_id)
+
             common_friends.append(user_friend)
 
         value = (0, "", common_friends)
@@ -372,7 +391,7 @@ class User:
             return value
 
         params_here = vk_common.params.copy()
-        params_here["user_id"] = self.id
+        params_here["user_id"] = self.uid
         params_here["count"] = 1000
 
         error, msg, response = vk_common.request_get("https://api.vk.com/method/groups.get", params_here,
@@ -386,8 +405,6 @@ class User:
             value = (error, msg, None)
             return value
 
-        # self.count_groups = count_items[0]
-        # self.groups = count_items[1]
         self.count_groups = count
         self.groups = items
 
@@ -405,7 +422,7 @@ class User:
         """
 
         if not isinstance(other, User):
-            print(f"Входные данные типа {type(other)}, а ожидается тип {type(self)}")
+            vk_common.dprint(1, f"Входные данные типа {type(other)}, а ожидается тип {type(self)}")
             raise ValueError
 
         # Conversions to sets from lists
@@ -429,7 +446,7 @@ class User:
         return value
 
     def print(self):
-        print(f"id = {self.id} fio = {self.first_name} {self.last_name}")
+        print(f"id = {self.uid} fio = {self.first_name} {self.last_name}")
 
     def get_additional_info(self, user):
         # Detect common friends
@@ -453,7 +470,17 @@ class User:
             self.cnt_common_groups = len(common_groups)
 
         # Detect common interests
-        self.cnt_common_interests = vk_common.is_common_by_text(self.interests, user.interests)
-        self.cnt_common_books = vk_common.is_common_by_text(self.books, user.books)
-        self.cnt_common_music = vk_common.is_common_by_text(self.music, user.music)
-        # TODO написать добавление в базу всех результатов поиска в одну транзакцию
+        self.cnt_common_interests = vk_common.is_common_by_text(user.interests, self.interests)
+        self.cnt_common_books = vk_common.is_common_by_text(user.books, self.books)
+        self.cnt_common_music = vk_common.is_common_by_text(user.music, self.music)
+
+        # Detect age difference
+        if user.age is None or self.age is None:
+            self.age_difference = 100
+        else:
+            self.age_difference = abs(user.age - self.age)
+
+
+
+
+

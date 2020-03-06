@@ -1,16 +1,129 @@
 from urllib.parse import urlencode
 import requests
 import time
-# from decorator_logger import logger_path_decorator, get_name_module
 from datetime import date
 import re
+import os
+import shutil
 
-FIELDS_USER_INFO = "id,first_name,last_name,bdate,interests,books,movies,music,sex,city"
+
+FIELDS_USER_INFO = "id,first_name,last_name,bdate,interests,books,music,sex,city"
 
 # Variables which need to work with API VK
 params = {"access_token": "", "v": 5.103, "timeout": 10}
 
 COUNT_REQUESTS_EXECUTE = 25
+DEBUG_MODE = 0
+
+DIR_IMAGES = 'images/'
+DIR_JSON = 'results/'
+
+MAX_IMAGE_WIDTH = 1280
+MAX_IMAGE_HEIGHT = 1024
+
+
+def dprint(level, *args):
+    """
+
+    (int, list) -> (None)
+
+    Function prints args (print depends of constant DEBUG_MODE)
+
+    """
+
+    if level <= DEBUG_MODE:
+        for arg in args:
+            print(arg, end=" ")
+        print("")
+
+
+def is_exists_dir(dir_path):
+    """
+
+    (int, list) -> (None)
+
+    Function checks existing of catalog
+
+    """
+
+    return os.path.exists(dir_path)
+
+
+def rm_dir(dir_path):
+    """
+
+    (string) -> (None)
+
+    Function remove catalog if it exists (recursively)
+
+    """
+
+    try:
+        if is_exists_dir(dir_path):
+            shutil.rmtree(dir_path)
+    except FileNotFoundError:
+        pass
+    except PermissionError:
+        pass
+        # print(f"Нельзя удалить каталог {dir}. Ошибка доступа.", error)
+
+
+def mk_dir(dir_path):
+    """
+
+    (string) -> (None)
+
+    Function create catalog if it not exists
+
+    """
+
+    try:
+        if not is_exists_dir(dir_path):
+            os.mkdir(dir_path)
+    except PermissionError:
+        pass
+        # print(f"Нельзя создать каталог {dir}. Ошибка доступа.", error)
+
+
+def recreate_dir(dir_path):
+    """
+
+    (string) -> (None)
+
+    Function remove catalog and create same empty catalog
+
+    """
+
+    rm_dir(dir_path)
+    mk_dir(dir_path)
+
+
+def recreate_dirs():
+    """
+
+    (string) -> (None)
+
+    Function recreate all catalogs needing for application
+
+    """
+
+    recreate_dir(DIR_IMAGES)
+    recreate_dir(DIR_JSON)
+    mk_dir(DIR_IMAGES)
+    mk_dir(DIR_JSON)
+
+
+def get_current_time_label():
+    """
+
+    (None) -> string
+
+    Function gets current time in string
+
+    """
+
+    current_time = time.strftime("%M%S")
+    return current_time
 
 
 def write_to_json(file_path, users):
@@ -40,12 +153,14 @@ def write_to_json(file_path, users):
             json.dump(data_list, outfile, ensure_ascii=False)
         return True
     except FileNotFoundError:
-        print(f"Файл \"{file_path}\" не найден.")
+        dprint(1, f"Файл \"{file_path}\" не найден.")
+        return False
     except PermissionError:
-        print(f"Не хватает прав для создания файла \"{file_path}\".")
-    except Exception as e:
-        print(f"Ошибка записи в файл \"{file_path}\".")
-        print(e)
+        dprint(1, f"Не хватает прав для создания файла \"{file_path}\".")
+        return False
+    except Exception as error:
+        dprint(1, f"Ошибка записи в файл \"{file_path}\".", error)
+        return False
 
 
 def download_photo(img_url):
@@ -53,7 +168,7 @@ def download_photo(img_url):
 
     (string) -> object Image
 
-    Function download file by url and save it to file by file_path
+    Function download image by url to object Image
 
     """
 
@@ -145,8 +260,11 @@ def is_common_by_text(text_src, text):
 
         found = re.search(pattern_res, text, re.IGNORECASE)
         if found is not None:
-            # print(found)
+            dprint(2, found)
             count_coincidences += 1
+
+    if count_coincidences > 1:
+        dprint(2, f"text = {text}; text_src = {text_src}; count = {count_coincidences}")
 
     return count_coincidences
 
@@ -154,9 +272,9 @@ def is_common_by_text(text_src, text):
 def get_age(birthday):
     """
 
-    (string, string) -> integer
+    (string) -> integer
 
-    Function gets count of similar parts of text with using divider = ','
+    Function gets age by birthday
 
     """
 
@@ -179,7 +297,6 @@ def get_age(birthday):
     return age
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def get_token(filename):
     """
 
@@ -202,7 +319,6 @@ def get_token(filename):
     return token
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def get_field_of_response(response_json, field_name):
     """
 
@@ -221,11 +337,11 @@ def get_field_of_response(response_json, field_name):
             value = (error_info['error_code'], error_info['error_msg'], None)
             return value
         except KeyError:
-            # print(f"Не найден ключ \"{field_name}\" в ответе {response_json}")
+            dprint(2, f"Не найден ключ \"{field_name}\" в ответе {response_json}")
             value = (-2, 'Не найден ключ', None)
             return value
     except TypeError:
-        print(f"Входные данные типа {type(response_json)}, а ожидается тип {type(dict())}")
+        dprint(1, f"Входные данные типа {type(response_json)}, а ожидается тип {type(dict())}")
         value = (-1, "Ошибка входных данных", None)
         return value
 
@@ -255,7 +371,6 @@ def get_fields_of_response(response_json, fields_string):
     return value
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def get_count_items_by_response(response):
     """
 
@@ -285,7 +400,6 @@ def get_count_items_by_response(response):
     return value
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def request_get(method, params_, function_name):
     """
 
@@ -302,13 +416,20 @@ def request_get(method, params_, function_name):
             error_info = response_json.get('error')
             if error_info is not None:
                 if error_info['error_code'] != 6:
+                    # if error_info['error_code'] == 29:
+                    #     time.sleep(1)
+                    #     print(method, params_)
+                    #     request_get(method, params_, function_name)
+                    # else:
                     value = (error_info['error_code'], error_info['error_msg'], None)
+                    time.sleep(1/3)
                     return value
                 else:
+                    time.sleep(1/3)
                     continue
             else:
                 print('.', end='')
-                # print(f".{function_name}")
+                dprint(2, f".{function_name}")
                 # because error appeared: many requests per second
                 time.sleep(1/3)
                 break
@@ -323,7 +444,6 @@ def request_get(method, params_, function_name):
     return value
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def auth():
     """
 
@@ -338,7 +458,8 @@ def auth():
         "client_id": 7238600,
         "display": "page",
         "response_type": "token",
-        "scope": "status, friends"
+        # "scope": "status, friends, likes"
+        "scope": "status, friends, wall, photos, pages, groups, stats"
     }
 
     print("?".join(
@@ -346,7 +467,6 @@ def auth():
     )
 
 
-# @logger_path_decorator(get_name_module(__file__)+'.log')
 def test_id(sid):
     """
 
@@ -367,3 +487,97 @@ def test_id(sid):
         return True
     else:
         return False
+
+
+def is_liked_photo(user_id, owner_id, item_id):
+    """
+
+    (int, int, int) -> (int, string, int or None)
+
+    Function gets information about liking photo with id=item_id by user with user_id
+
+    """
+
+    params_here = params.copy()
+    params_here["user_id"] = user_id
+    params_here["type"] = "photo"
+    params_here["owner_id"] = owner_id
+    params_here["item_id"] = item_id
+    error, msg, response = request_get("https://api.vk.com/method/likes.isLiked", params_here, func_name())
+    if error != 0:
+        dprint(2, f"Запрос по определению лайка объекта пользователем, ошибка: ({error}, {msg})")
+        return error, msg, None
+
+    response_json = response.json()
+    dprint(2, "Результат запроса: ", response_json)
+
+    error, msg, info_json_list = get_field_of_response(response_json, "response")
+    if error != 0:
+        dprint(2, f"Парсим ответ: ошибка ({error}, {msg})")
+        return error, msg, None
+    dprint(2, f"Парсим ответ: получили: {info_json_list}")
+    value = 0, "", info_json_list['liked']
+    return value
+
+
+def liking_photo(owner_id, item_id, value):
+    """
+
+    (int, int, int) -> (int, string, int or None)
+
+    Function setting parameter "like" to photo with id=item_id to user with owner_id
+
+    """
+
+    if value not in (0, 1):
+        dprint(2, func_name(), "Значение должно быть 0 или 1.")
+        return -1, f"{func_name()}: Значение должно быть 0 или 1.", None
+
+    if value == 0:
+        str_func = 'delete'
+    else:
+        str_func = 'add'
+
+    params_here = params.copy()
+    params_here["type"] = "photo"
+    params_here["owner_id"] = owner_id
+    params_here["item_id"] = item_id
+    error, msg, response = request_get(f"https://api.vk.com/method/likes.{str_func}", params_here, func_name())
+    if error != 0:
+        dprint(2, f"Запрос по (диз)лайку, ошибка: ({error}, {msg})")
+        return error, msg, None
+
+    response_json = response.json()
+    dprint(2, "Результат запроса: ", response_json)
+
+    error, msg, info_json_list = get_field_of_response(response_json, "response")
+    if error != 0:
+        dprint(2, f"Парсим ответ: ошибка ({error}, {msg})")
+        return error, msg, None
+    dprint(2, f"Парсим ответ: получили: {info_json_list}")
+    value = 0, "", info_json_list['likes']
+    return value
+
+
+def like_photo(owner_id, item_id):
+    """
+
+    (int, int) -> (int, string, int or None)
+
+    Function set "like" (value = 1) to photo with id=item_id to user with owner_id
+
+    """
+
+    return liking_photo(owner_id, item_id, 1)
+
+
+def dislike_photo(owner_id, item_id):
+    """
+
+    (int, int) -> (int, string, int or None)
+
+    Function set "dislike" (value = 0) to photo with id=item_id to user with owner_id
+
+    """
+
+    return liking_photo(owner_id, item_id, 0)
